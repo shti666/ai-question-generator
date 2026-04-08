@@ -543,16 +543,66 @@ function App() {
     setQuestions([])
     
     try {
-      const response = await fetch('/api/generate', {
+      // 直接在前端调用 DeepSeek API
+      const subjectNames = { math: '数学', chinese: '语文', english: '英语', physics: '物理', chemistry: '化学', biology: '生物', history: '历史', geography: '地理', politics: '政治' }
+      const gradeNames = { '1': '一年级', '2': '二年级', '3': '三年级', '4': '四年级', '5': '五年级', '6': '六年级', '7': '初一', '8': '初二', '9': '初三', '10': '高一', '11': '高二', '12': '高三' }
+      const difficultyNames = { easy: '简单', medium: '中等', hard: '困难' }
+      
+      const prompt = `你是一位专业的${subjectNames[subject]}老师。请为${gradeNames[grade]}学生生成 ${questionCount} 道${difficultyNames[difficulty]}难度的${subjectNames[subject]}题，知识点是：「${topic}」
+
+要求：
+1. 题目要符合${gradeNames[grade]}学生的知识水平
+2. 每题都要有标准答案和详细解析
+3. 如果涉及几何图形、图表等，在image字段描述图片类型
+
+请严格按照以下JSON格式输出：
+{
+  "questions": [
+    {
+      "question": "题目内容",
+      "answer": "答案",
+      "explanation": "解析",
+      "image": {"type": "图片类型(无则为null)", "params": {}}
+    }
+  ]
+}
+只输出JSON，不要其他文字。`
+
+      const response = await fetch('https://api.deepseek.com/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject, grade, topic, difficulty, questionCount }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer sk-75bbe0aa96244d78aad83a9de48ef0e7'
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            { role: 'system', content: '你是一位专业的出题老师。' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        })
       })
+      
       const data = await response.json()
-      if (data.success) { setQuestions(data.questions); setFreeCount(prev => prev - 1) }
-      else setError(data.error || '生成失败，请重试')
+      
+      if (data.choices && data.choices[0]) {
+        const content = data.choices[0].message.content
+        const jsonMatch = content.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          setQuestions(parsed.questions || [])
+          setFreeCount(prev => prev - 1)
+        } else {
+          setError('生成失败，请重试')
+        }
+      } else {
+        setError('AI服务暂时不可用')
+      }
     } catch (err) {
-      setError('网络错误，请检查后端服务')
+      console.error(err)
+      setError('网络错误，请稍后重试')
     } finally {
       setIsGenerating(false)
     }
