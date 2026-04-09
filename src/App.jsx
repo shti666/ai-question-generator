@@ -451,11 +451,15 @@ function PaperCard({ paper, onClick }) {
 }
 
 // 试卷详情视图
-function PaperDetail({ paper, onBack }) {
+function PaperDetail({ paper, onBack, isPaid, onShowPay }) {
   const [showAnswer, setShowAnswer] = useState(false)
   const subject = SUBJECTS.find(s => s.value === paper.subject)
 
   const handlePrint = () => {
+    if (!isPaid) {
+      onShowPay()
+      return
+    }
     const printContent = document.getElementById('paper-content')
     const printWindow = window.open('', '_blank')
     printWindow.document.write(`
@@ -485,43 +489,52 @@ function PaperDetail({ paper, onBack }) {
     printWindow.print()
   }
 
+  const handleToggleAnswer = () => {
+    if (!isPaid) {
+      onShowPay()
+      return
+    }
+    setShowAnswer(!showAnswer)
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: '#f5f5f5' }}>
       <Header title="试卷详情" onBack={onBack} showBack={true} />
       
+      {/* 未付费提示条 */}
+      {!isPaid && (
+        <div onClick={onShowPay} style={{ background: '#FFF3CD', borderBottom: '1px solid #FFE4B5', padding: '10px 16px', textAlign: 'center', cursor: 'pointer', fontSize: '13px', color: '#856404' }}>
+          🔒 预览模式 · <strong>支付 ¥9.9</strong> 解锁打印和查看完整答案
+        </div>
+      )}
+      
       {/* 工具栏 */}
-      <div style={{
-        background: 'white',
-        padding: '12px 20px',
-        display: 'flex',
-        gap: '10px',
-        borderBottom: '1px solid #eee'
-      }}>
+      <div style={{ background: 'white', padding: '12px 20px', display: 'flex', gap: '10px', borderBottom: '1px solid #eee' }}>
         <button onClick={handlePrint} style={{
           flex: 1,
-          background: '#667eea',
+          background: isPaid ? '#667eea' : '#ccc',
           color: 'white',
           border: 'none',
           padding: '10px',
           borderRadius: '8px',
           fontSize: '14px',
-          cursor: 'pointer',
+          cursor: isPaid ? 'pointer' : 'not-allowed',
           fontWeight: '500'
         }}>
-          🖨️ 打印试卷
+          {isPaid ? '🖨️ 打印试卷' : '🔒 打印（需解锁）'}
         </button>
-        <button onClick={() => setShowAnswer(!showAnswer)} style={{
+        <button onClick={handleToggleAnswer} style={{
           flex: 1,
-          background: showAnswer ? '#27AE60' : '#f0f0f0',
-          color: showAnswer ? 'white' : '#333',
+          background: isPaid ? (showAnswer ? '#27AE60' : '#f0f0f0') : '#ccc',
+          color: isPaid ? (showAnswer ? 'white' : '#333') : 'white',
           border: 'none',
           padding: '10px',
           borderRadius: '8px',
           fontSize: '14px',
-          cursor: 'pointer',
+          cursor: isPaid ? 'pointer' : 'not-allowed',
           fontWeight: '500'
         }}>
-          👁️ {showAnswer ? '隐藏答案' : '显示答案'}
+          {isPaid ? (showAnswer ? '👁️ 隐藏答案' : '👁️ 显示答案') : '🔒 答案（需解锁）'}
         </button>
       </div>
 
@@ -675,7 +688,23 @@ function PaperDetail({ paper, onBack }) {
 }
 
 // 购买弹窗
-function PayModal({ onClose }) {
+function PayModal({ onClose, onSuccess }) {
+  const [code, setCode] = useState('')
+  const [error, setError] = useState('')
+  const [showQR, setShowQR] = useState(true)
+
+  const verifyCode = () => {
+    const c = code.trim().toUpperCase()
+    if (c === '9900') {
+      localStorage.setItem('paid_v1', 'true')
+      onSuccess()
+      onClose()
+    } else {
+      setError('验证码错误，请检查支付截图后重试')
+      setCode('')
+    }
+  }
+
   return (
     <div style={{
       position: 'fixed',
@@ -688,11 +717,13 @@ function PayModal({ onClose }) {
       <div style={{
         background: 'white',
         width: '100%',
+        maxHeight: '92vh',
+        overflowY: 'auto',
         borderRadius: '20px 20px 0 0',
         padding: '24px',
         animation: 'slideUp 0.3s ease'
       }} onClick={e => e.stopPropagation()}>
-        <style>{`@keyframes slideUp { from { transform: translateY(100%) } to { transform: translateY(0) } }`}</style>
+        <style>{`@keyframes slideUp { from { transform: translateY(100%) } to { transform: translateY(0) } } @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }`}</style>
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h2 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>解锁全部真题</h2>
@@ -711,62 +742,134 @@ function PayModal({ onClose }) {
           <div style={{ fontSize: '14px', opacity: 0.9 }}>永久解锁 · 全部真题 · 持续更新</div>
         </div>
 
-        <div style={{ marginBottom: '20px' }}>
-          <h3 style={{ fontSize: '14px', color: '#666', marginBottom: '10px' }}>选择支付方式</h3>
-          
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-            <div style={{
+        {/* 步骤切换 */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+          <button
+            onClick={() => setShowQR(true)}
+            style={{
               flex: 1,
-              border: '2px solid #ddd',
+              padding: '10px',
+              border: 'none',
               borderRadius: '10px',
-              padding: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              cursor: 'pointer'
-            }}>
-              <span style={{ fontSize: '28px' }}>💬</span>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: '500' }}>微信支付</div>
-                <div style={{ fontSize: '11px', color: '#999' }}>推荐</div>
-              </div>
-            </div>
-            <div style={{
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              background: showQR ? 'linear-gradient(135deg, #667eea, #764ba2)' : '#f0f0f0',
+              color: showQR ? 'white' : '#666'
+            }}
+          >
+            💬 扫码支付
+          </button>
+          <button
+            onClick={() => setShowQR(false)}
+            style={{
               flex: 1,
-              border: '2px solid #ddd',
+              padding: '10px',
+              border: 'none',
               borderRadius: '10px',
-              padding: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              cursor: 'pointer'
-            }}>
-              <span style={{ fontSize: '28px' }}>💰</span>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: '500' }}>支付宝</div>
-                <div style={{ fontSize: '11px', color: '#999' }}>安全</div>
-              </div>
-            </div>
-          </div>
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              background: !showQR ? 'linear-gradient(135deg, #667eea, #764ba2)' : '#f0f0f0',
+              color: !showQR ? 'white' : '#666'
+            }}
+          >
+            🔑 输入验证码
+          </button>
         </div>
 
-        <button style={{
-          width: '100%',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          border: 'none',
-          padding: '14px',
-          borderRadius: '10px',
-          fontSize: '16px',
-          fontWeight: '600',
-          cursor: 'pointer'
-        }}>
-          📱 截图联系客服开通
-        </button>
+        {showQR ? (
+          <>
+            {/* 微信收款码 */}
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ background: '#f8f8f8', borderRadius: '12px', padding: '16px', display: 'inline-block' }}>
+                <img
+                  src="/wechat-pay.jpg"
+                  alt="微信收款码"
+                  style={{ width: '220px', height: 'auto', borderRadius: '8px' }}
+                  onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block' }}
+                />
+                <div style={{ display: 'none', textAlign: 'center', color: '#999', padding: '20px' }}>
+                  <div style={{ fontSize: '40px', marginBottom: '8px' }}>💬</div>
+                  <p style={{ fontSize: '14px' }}>请添加客服微信获取收款码</p>
+                </div>
+              </div>
+              <p style={{ fontSize: '13px', color: '#666', marginTop: '10px' }}>
+                👆 长按识别上方收款码，支付 <strong style={{ color: '#E74C3C', fontSize: '18px' }}>¥9.9</strong>
+              </p>
+            </div>
 
-        <p style={{ textAlign: 'center', fontSize: '12px', color: '#999', marginTop: '12px' }}>
-          支付成功后，截图发给客服微信 👉 <span style={{ color: '#667eea', fontWeight: '500' }}>请添加客服微信</span>
-        </p>
+            <div style={{
+              background: '#FFF7E6',
+              border: '1px solid #FFE4B5',
+              borderRadius: '10px',
+              padding: '12px',
+              marginBottom: '16px',
+              fontSize: '13px',
+              color: '#8B6914',
+              lineHeight: '1.6'
+            }}>
+              <strong>💡 开通流程：</strong><br/>
+              ① 截图保存此页面<br/>
+              ② 截图发给客服微信<br/>
+              ③ 客服发送验证码<br/>
+              ④ 返回此处输入验证码解锁
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '13px', color: '#666', display: 'block', marginBottom: '8px' }}>
+                请输入客服发送的验证码
+              </label>
+              <input
+                type="text"
+                value={code}
+                onChange={e => { setCode(e.target.value); setError('') }}
+                placeholder="例如：9900"
+                maxLength={8}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: `2px solid ${error ? '#E74C3C' : '#ddd'}`,
+                  borderRadius: '10px',
+                  fontSize: '18px',
+                  textAlign: 'center',
+                  letterSpacing: '4px',
+                  fontWeight: '600',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+              {error && (
+                <p style={{ color: '#E74C3C', fontSize: '12px', marginTop: '6px' }}>{error}</p>
+              )}
+            </div>
+
+            <button
+              onClick={verifyCode}
+              disabled={!code.trim()}
+              style={{
+                width: '100%',
+                background: code.trim() ? 'linear-gradient(135deg, #667eea, #764ba2)' : '#ccc',
+                color: 'white',
+                border: 'none',
+                padding: '14px',
+                borderRadius: '10px',
+                fontSize: '16px',
+                fontWeight: '600',
+                cursor: code.trim() ? 'pointer' : 'not-allowed',
+                marginBottom: '12px'
+              }}
+            >
+              🔓 立即解锁
+            </button>
+
+            <p style={{ textAlign: 'center', fontSize: '12px', color: '#999' }}>
+              还未支付？<button onClick={() => setShowQR(true)} style={{ background: 'none', border: 'none', color: '#667eea', cursor: 'pointer', fontSize: '12px' }}>去扫码支付 →</button>
+            </p>
+          </>
+        )}
       </div>
     </div>
   )
@@ -906,10 +1009,7 @@ function Home({ onSearch }) {
 }
 
 // 搜索/筛选页
-function SearchPage({ filters, onBack, onSelectPaper, onSearch }) {
-  const [showPay, setShowPay] = useState(false)
-  const [selectedPaper, setSelectedPaper] = useState(null)
-
+function SearchPage({ filters, onBack, onSelectPaper, onSearch, onShowPay, isPaid }) {
   // 筛选真题
   const filteredPapers = useMemo(() => {
     return SAMPLE_PAPERS.filter(paper => {
@@ -920,10 +1020,8 @@ function SearchPage({ filters, onBack, onSelectPaper, onSearch }) {
     })
   }, [filters])
 
-  // 获取当前筛选的省份下的城市
   const currentProvince = PROVINCES.find(p => p.value === filters.province)
 
-  // 筛选结果的文字描述
   const resultDesc = useMemo(() => {
     const parts = []
     if (filters.subject) {
@@ -941,144 +1039,51 @@ function SearchPage({ filters, onBack, onSelectPaper, onSearch }) {
     return parts.length ? `关于"${parts.join(' · ')}"的真题` : '全部真题'
   }, [filters])
 
-  if (selectedPaper) {
-    return <PaperDetail paper={selectedPaper} onBack={() => setSelectedPaper(null)} />
-  }
-
   return (
     <div style={{ minHeight: '100vh', background: '#f5f5f5' }}>
       <Header title="查找真题" onBack={onBack} showBack={true} />
 
       {/* 筛选区 */}
-      <div style={{
-        background: 'white',
-        padding: '16px',
-        borderBottom: '1px solid #eee',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px'
-      }}>
+      <div style={{ background: 'white', padding: '16px', borderBottom: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {/* 省份选择 */}
-          <select
-            value={filters.province || ''}
-            onChange={e => onSearch({ ...filters, province: e.target.value, city: '' })}
-            style={{
-              flex: 1,
-              minWidth: '100px',
-              padding: '8px 12px',
-              border: '1px solid #ddd',
-              borderRadius: '8px',
-              fontSize: '13px',
-              background: 'white',
-              color: filters.province ? '#333' : '#999',
-              cursor: 'pointer',
-              minHeight: '36px'
-            }}
-          >
+          <select value={filters.province || ''} onChange={e => onSearch({ ...filters, province: e.target.value, city: '' })}
+            style={{ flex: 1, minWidth: '100px', padding: '8px 12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '13px', background: 'white', color: filters.province ? '#333' : '#999', minHeight: '36px' }}>
             <option value="">🏠 全部省份</option>
             {PROVINCES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
-
-          {/* 城市选择 */}
-          <select
-            value={filters.city || ''}
-            onChange={e => onSearch({ ...filters, city: e.target.value })}
-            disabled={!currentProvince}
-            style={{
-              flex: 1,
-              minWidth: '100px',
-              padding: '8px 12px',
-              border: '1px solid #ddd',
-              borderRadius: '8px',
-              fontSize: '13px',
-              background: 'white',
-              color: filters.city ? '#333' : '#999',
-              cursor: filters.city ? 'pointer' : 'not-allowed',
-              minHeight: '36px'
-            }}
-          >
+          <select value={filters.city || ''} onChange={e => onSearch({ ...filters, city: e.target.value })} disabled={!currentProvince}
+            style={{ flex: 1, minWidth: '100px', padding: '8px 12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '13px', background: 'white', color: filters.city ? '#333' : '#999', cursor: currentProvince ? 'pointer' : 'not-allowed', minHeight: '36px' }}>
             <option value="">🏙️ 全部城市</option>
             {currentProvince?.cities.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {/* 年级选择 */}
-          <select
-            value={filters.grade || ''}
-            onChange={e => onSearch({ ...filters, grade: e.target.value })}
-            style={{
-              flex: 1,
-              minWidth: '100px',
-              padding: '8px 12px',
-              border: '1px solid #ddd',
-              borderRadius: '8px',
-              fontSize: '13px',
-              background: 'white',
-              color: filters.grade ? '#333' : '#999',
-              minHeight: '36px'
-            }}
-          >
+          <select value={filters.grade || ''} onChange={e => onSearch({ ...filters, grade: e.target.value })}
+            style={{ flex: 1, minWidth: '100px', padding: '8px 12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '13px', background: 'white', color: filters.grade ? '#333' : '#999', minHeight: '36px' }}>
             <option value="">📚 全部年级</option>
             {GRADES.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
           </select>
-
-          {/* 学科选择 */}
-          <select
-            value={filters.subject || ''}
-            onChange={e => onSearch({ ...filters, subject: e.target.value })}
-            style={{
-              flex: 1,
-              minWidth: '100px',
-              padding: '8px 12px',
-              border: '1px solid #ddd',
-              borderRadius: '8px',
-              fontSize: '13px',
-              background: 'white',
-              color: filters.subject ? '#333' : '#999',
-              minHeight: '36px'
-            }}
-          >
+          <select value={filters.subject || ''} onChange={e => onSearch({ ...filters, subject: e.target.value })}
+            style={{ flex: 1, minWidth: '100px', padding: '8px 12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '13px', background: 'white', color: filters.subject ? '#333' : '#999', minHeight: '36px' }}>
             <option value="">📖 全部科目</option>
             {SUBJECTS.map(s => <option key={s.value} value={s.value}>{s.icon} {s.label}</option>)}
           </select>
         </div>
 
-        {/* 已选标签 */}
         {Object.values(filters).some(v => v) && (
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             {Object.entries(filters).map(([key, val]) => {
               if (!val) return null
-              const labels = { province: PROVINCES, city: null, grade: GRADES, subject: SUBJECTS }
-              const label = labels[key]?.find(l => l.value === val)?.label || val
+              const labelMaps = { province: PROVINCES, grade: GRADES, subject: SUBJECTS }
+              const label = labelMaps[key]?.find(l => l.value === val)?.label || val
               return (
-                <span key={key} style={{
-                  background: '#667eea',
-                  color: 'white',
-                  padding: '3px 10px',
-                  borderRadius: '12px',
-                  fontSize: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
+                <span key={key} style={{ background: '#667eea', color: 'white', padding: '3px 10px', borderRadius: '12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   {label}
-                  <button
-                    onClick={() => onSearch({ ...filters, [key]: '' })}
-                    style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '0', fontSize: '14px', lineHeight: 1 }}
-                  >
-                    ×
-                  </button>
+                  <button onClick={() => onSearch({ ...filters, [key]: '' })} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '0', fontSize: '14px', lineHeight: 1 }}>×</button>
                 </span>
               )
             })}
-            <button
-              onClick={() => onSearch({})}
-              style={{ background: 'none', border: 'none', color: '#999', fontSize: '12px', cursor: 'pointer' }}
-            >
-              清除全部
-            </button>
+            <button onClick={() => onSearch({})} style={{ background: 'none', border: 'none', color: '#999', fontSize: '12px', cursor: 'pointer' }}>清除全部</button>
           </div>
         )}
       </div>
@@ -1098,49 +1103,27 @@ function SearchPage({ filters, onBack, onSelectPaper, onSearch }) {
         ) : (
           filteredPapers.map(paper => (
             <PaperCard key={paper.id} paper={paper} onClick={() => {
-              // 免费预览前3份
               const idx = filteredPapers.indexOf(paper)
-              if (idx < 3) {
-                setSelectedPaper(paper)
+              if (idx < 3 || isPaid) {
+                onSelectPaper(paper)
               } else {
-                setShowPay(true)
+                onShowPay()
               }
             }} />
           ))
         )}
 
         {filteredPapers.length > 3 && (
-          <div style={{
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            borderRadius: '12px',
-            padding: '20px',
-            textAlign: 'center',
-            color: 'white',
-            marginTop: '16px'
-          }}>
+          <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '12px', padding: '20px', textAlign: 'center', color: 'white', marginTop: '16px' }}>
             <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔓</div>
             <div style={{ fontSize: '15px', fontWeight: '600', marginBottom: '4px' }}>查看完整真题库</div>
-            <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '12px' }}>解锁全部{filteredPapers.length}份+历年真题</div>
-            <button
-              onClick={() => setShowPay(true)}
-              style={{
-                background: 'white',
-                color: '#667eea',
-                border: 'none',
-                padding: '10px 24px',
-                borderRadius: '20px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer'
-              }}
-            >
+            <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '12px' }}>解锁全部{filteredPapers.length}+份历年真题</div>
+            <button onClick={onShowPay} style={{ background: 'white', color: '#667eea', border: 'none', padding: '10px 24px', borderRadius: '20px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
               立即解锁 ¥9.9
             </button>
           </div>
         )}
       </div>
-
-      {showPay && <PayModal onClose={() => setShowPay(false)} />}
     </div>
   )
 }
@@ -1150,24 +1133,41 @@ export default function App() {
   const [view, setView] = useState('home') // home | search
   const [filters, setFilters] = useState({})
   const [selectedPaper, setSelectedPaper] = useState(null)
+  const [isPaid, setIsPaid] = useState(() => localStorage.getItem('paid_v1') === 'true')
+  const [showPay, setShowPay] = useState(false)
 
   const handleSearch = (newFilters) => {
     setFilters(newFilters)
     setView('search')
   }
 
+  const handlePaySuccess = () => {
+    setIsPaid(true)
+    setShowPay(false)
+  }
+
   if (selectedPaper) {
-    return <PaperDetail paper={selectedPaper} onBack={() => setSelectedPaper(null)} />
+    return <PaperDetail paper={selectedPaper} onBack={() => setSelectedPaper(null)} isPaid={isPaid} onShowPay={() => setShowPay(true)} />
   }
 
   if (view === 'search') {
     return (
-      <SearchPage
-        filters={filters}
-        onBack={() => setView('home')}
-        onSearch={handleSearch}
-        onSelectPaper={setSelectedPaper}
-      />
+      <>
+        <SearchPage
+          filters={filters}
+          onBack={() => setView('home')}
+          onSearch={handleSearch}
+          onSelectPaper={(paper) => {
+            const idx = SAMPLE_PAPERS.indexOf(paper)
+            if (idx < 3 || isPaid) {
+              setSelectedPaper(paper)
+            }
+          }}
+          onShowPay={() => setShowPay(true)}
+          isPaid={isPaid}
+        />
+        {showPay && <PayModal onClose={() => setShowPay(false)} onSuccess={handlePaySuccess} />}
+      </>
     )
   }
 
